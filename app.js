@@ -5,7 +5,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const mongoose = require("mongoose");
-const encrypt = require("mongoose-encryption");
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
 
 const app = express();
 
@@ -25,12 +26,6 @@ const userSchema = new mongoose.Schema({ // Here we transform the ordinary Schem
   password: String
 });
 
-// secret is the key to encrypt the database, it has to be a long string.
-// It will be moved to .env file for security reasons. IT SHOULD NOT BE HERE.
-// const secret = "ThisIsOurLittleSecret.";
-
-userSchema.plugin(encrypt, {secret: process.env.SECRET, encryptedFields: ["password"]});
-// encryptedFields makes that only the property inside brackets gets encrypted.
 const User = new mongoose.model ("User", userSchema);
 
 // Creation of database - End
@@ -48,14 +43,20 @@ app.get ("/register", function(req, res){
 });
 
 app.post("/register", function(req, res){
-  const newUser = new User({
-    email: req.body.username,
-    password: req.body.password
+
+  bcrypt.hash(req.body.password, saltRounds, function(err, hash) {
+
+    const newUser = new User({
+      email: req.body.username,
+      password: hash
+    });
+
+    newUser.save().then(function(){
+      res.render("secrets");
+    });
+
   });
 
-  newUser.save().then(function(){
-    res.render("secrets");
-  });
 });
 
 app.post("/login", function(req, res){
@@ -64,12 +65,17 @@ app.post("/login", function(req, res){
 
   User.findOne({email: username}).then(function(foundUser){
     if (foundUser) {
-      if (foundUser.password === password) {
-        res.render("secrets");
-      }
 
-      console.log(foundUser.password);
+      bcrypt.compare(password, foundUser.password, function(err, result) { // foundUser.password is the hash stored in DB
+          if (result === true) {
+            res.render("secrets");
+          }
+      });
+
     }
+
+    console.log(foundUser.password);
+  
   });
 });
 
